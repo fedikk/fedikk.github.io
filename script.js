@@ -131,6 +131,19 @@ class ExpenseTracker {
             this.exportToCSV();
         });
         
+        // Export/Import JSON Backup
+        document.getElementById('exportJsonBtn').addEventListener('click', () => {
+            this.exportToJson();
+        });
+        
+        document.getElementById('importJsonBtn').addEventListener('click', () => {
+            document.getElementById('importFile').click();
+        });
+        
+        document.getElementById('importFile').addEventListener('change', (e) => {
+            this.importFromJson(e);
+        });
+        
         // Close modals on outside click
         document.querySelectorAll('.modal').forEach(modal => {
             modal.addEventListener('click', (e) => {
@@ -1051,6 +1064,77 @@ class ExpenseTracker {
         document.body.removeChild(link);
         
         this.showToast('Expenses exported to CSV!', 'success');
+    }
+    
+    exportToJson() {
+        if (!this.data || (this.data.participants.length === 0 && !this.data.trip.name)) {
+            this.showToast('No trip data to export', 'error');
+            return;
+        }
+
+        const dataStr = JSON.stringify(this.data, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const fileName = `trip_backup_${(this.data.trip.name || 'data').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.style.display = 'none';
+        
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        }, 100);
+        
+        this.showToast('Trip backup exported successfully!', 'success');
+    }
+    
+    importFromJson(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        if (!file.name.endsWith('.json')) {
+            this.showToast('Please select a valid JSON file', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                
+                // Validation
+                if (!importedData.trip || !importedData.participants || !importedData.expenses) {
+                    throw new Error('Invalid backup file format. Missing core trip data.');
+                }
+                
+                if (confirm('Importing this file will replace all your current trip data. Are you sure you want to proceed?')) {
+                    this.data = importedData;
+                    this.saveData();
+                    
+                    // Refresh UI
+                    this.initUI();
+                    this.updateDashboard();
+                    this.renderParticipants();
+                    this.renderExpenses();
+                    this.updateCharts();
+                    this.calculateSettlements();
+                    
+                    this.showToast('Trip data imported successfully!', 'success');
+                }
+            } catch (error) {
+                console.error('Import error:', error);
+                this.showToast('Error importing file: ' + error.message, 'error');
+            }
+            // Reset the file input
+            event.target.value = '';
+        };
+        reader.readAsText(file);
     }
     
     // Toast Methods
